@@ -1,17 +1,89 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15
-    container_name: churn_db
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: churn_postgres
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password123
-      POSTGRES_DB: churn_data
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-churn_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - churn_network
+
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: churn_api
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-churn_db}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MODEL_PATH=/app/models
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./models:/app/models
+      - ./src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - churn_network
+
+  # MLflow Tracking Server
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mlflow
+    container_name: churn_mlflow
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-churn_db}
+      - MLFLOW_ARTIFACT_ROOT=/mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - churn_network
+
+  # Streamlit Dashboard
+  streamlit:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.streamlit
+    container_name: churn_streamlit
+    environment:
+      - API_URL=http://api:8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-churn_db}
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    volumes:
+      - ./streamlit_app:/app
+    depends_on:
+      - api
+    networks:
+      - churn_network
 
 volumes:
   postgres_data:
+  mlflow_artifacts:
+
+networks:
+  churn_network:
+    driver: bridge

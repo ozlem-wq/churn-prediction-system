@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: churn-api
+  namespace: churn-system
+  labels:
+    app: churn-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: churn-api
+  template:
+    metadata:
+      labels:
+        app: churn-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/your-org/churn-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: churn-secrets
+                  key: DATABASE_URL
+            - name: API_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: churn-config
+                  key: API_HOST
+            - name: API_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: churn-config
+                  key: API_PORT
+            - name: API_DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: churn-config
+                  key: API_DEBUG
+            - name: MLFLOW_TRACKING_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: churn-config
+                  key: MLFLOW_TRACKING_URI
+            - name: MODEL_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: churn-config
+                  key: MODEL_PATH
+          volumeMounts:
+            - name: model-storage
+              mountPath: /app/models
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: model-pvc

@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: churn-system
+  labels:
+    app: mlflow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+        - name: mlflow
+          image: ghcr.io/your-org/churn-mlflow:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: MLFLOW_BACKEND_STORE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: churn-secrets
+                  key: DATABASE_URL
+            - name: MLFLOW_ARTIFACT_ROOT
+              value: /mlflow/artifacts
+          volumeMounts:
+            - name: mlflow-storage
+              mountPath: /mlflow/artifacts
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "400m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: mlflow-storage
+          persistentVolumeClaim:
+            claimName: mlflow-pvc

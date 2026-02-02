@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: churn-system
+  labels:
+    app.kubernetes.io/name: churn-prediction
+    app.kubernetes.io/part-of: churn-system

@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: churn-streamlit
+  namespace: churn-system
+  labels:
+    app: churn-streamlit
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: churn-streamlit
+  template:
+    metadata:
+      labels:
+        app: churn-streamlit
+    spec:
+      containers:
+        - name: streamlit
+          image: ghcr.io/your-org/churn-streamlit:latest
+          ports:
+            - containerPort: 8501
+          env:
+            - name: API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: churn-config
+                  key: API_URL
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: churn-secrets
+                  key: DATABASE_URL
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "400m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 5
+            periodSeconds: 5
